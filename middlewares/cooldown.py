@@ -75,15 +75,39 @@ class CooldownMiddleware(BaseMiddleware):
                     # Удаляем сообщение пользователя
                     await event.delete()
                     
-                    # Отправляем предупреждение
+                    # Отправляем предупреждение с обратным отсчетом
                     wait_time = int(self.cooldown_seconds - time_passed)
+                    
+                    # Имя пользователя для персонализации
+                    user_name = event.from_user.first_name or "Пользователь"
+                    
                     warning_msg = await event.answer(
-                        f"⏱ Подожди {wait_time} сек. перед отправкой следующего сообщения.",
+                        f"⏱ {user_name}, подожди еще <b>{wait_time}</b> сек.",
                         reply_to_message_id=None
                     )
                     
-                    # Удаляем предупреждение через 5 секунд
-                    await warning_msg.delete_with_delay(5)
+                    # Обновляем сообщение каждую секунду
+                    import asyncio
+                    for remaining in range(wait_time - 1, 0, -1):
+                        await asyncio.sleep(1)
+                        try:
+                            await warning_msg.edit_text(
+                                f"⏱ {user_name}, подожди еще <b>{remaining}</b> сек."
+                            )
+                        except Exception:
+                            break  # Если сообщение удалено, прекращаем обновление
+                    
+                    # Финальное сообщение
+                    await asyncio.sleep(1)
+                    try:
+                        await warning_msg.edit_text(
+                            f"✅ {user_name}, теперь можешь отправлять сообщения!"
+                        )
+                        # Удаляем через 3 секунды
+                        await asyncio.sleep(3)
+                        await warning_msg.delete()
+                    except Exception:
+                        pass
                     
                     logger.info(
                         f"Сообщение от {user_id} в чате {chat_id} "
